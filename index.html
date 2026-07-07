@@ -7,14 +7,12 @@
     <script>
       // Apply theme before first paint to avoid flash
       (function () {
-        var saved = localStorage.getItem("tasogare-mode");
-        var mode =
-          saved === "day" || saved === "night"
-            ? saved
-            : window.matchMedia("(prefers-color-scheme: dark)").matches
-              ? "night"
-              : "day";
-        document.documentElement.dataset.mode = mode;
+        try {
+          var h = Number(new Date().toLocaleString("en", { timeZone: "Asia/Shanghai", hour: "numeric", hour12: false }));
+          document.documentElement.dataset.mode = (h >= 18 || h < 6) ? "night" : "day";
+        } catch (e) {
+          document.documentElement.dataset.mode = "day";
+        }
       })();
     </script>
   </head>

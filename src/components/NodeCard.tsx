@@ -2,6 +2,7 @@ import type { LatestStatus, NodeInfo } from "../lib/api";
 import { daysUntil, fmtBytes, fmtPercent, fmtSpeed, fmtUptime, shortOs, trafficUsed } from "../lib/format";
 import { fmtDaysLeft, t } from "../lib/i18n";
 import { osIcon } from "../lib/osIcon";
+import { lossColor, pingColor, pingFace, pingTier } from "../lib/ping";
 import Flag from "./Flag";
 
 interface Props {
@@ -11,9 +12,6 @@ interface Props {
   showLatency: boolean;
   onClick: () => void;
 }
-
-// latency tiers: green = fast, amber = medium, rose = slow
-const pingColor = (ms: number) => (ms < 100 ? "#34d399" : ms < 200 ? "#fbbf24" : "#fb7185");
 
 // subtle 3D tilt, mouse-only
 const canTilt =
@@ -76,12 +74,14 @@ export default function NodeCard({ node, status, index, showLatency, onClick }: 
   const ramPct = status ? fmtPercent(status.ram, status.ram_total || node.mem_total) : 0;
   const diskPct = status ? fmtPercent(status.disk, status.disk_total || node.disk_total) : 0;
 
-  const pingStats = status
-    ? Object.values(status.ping || {}).filter((p) => p.avg > 0)
-    : [];
-  const avgPing = pingStats.length
-    ? Math.round(pingStats.reduce((a, b) => a + b.avg, 0) / pingStats.length)
+  const pingStats = status ? Object.values(status.ping || {}) : [];
+  const measuredPing = pingStats.filter((p) => p.avg > 0);
+  const avgPing = measuredPing.length
+    ? Math.round(measuredPing.reduce((a, b) => a + b.avg, 0) / measuredPing.length)
     : null;
+  const avgLoss = measuredPing.length
+    ? measuredPing.reduce((a, b) => a + b.loss, 0) / measuredPing.length
+    : 0;
 
   const trafficLimit = node.traffic_limit || 0;
   const trafficUse = status ? trafficUsed(status.net_total_up, status.net_total_down, node.traffic_limit_type) : 0;
@@ -167,10 +167,15 @@ export default function NodeCard({ node, status, index, showLatency, onClick }: 
               <span style={{ color: "#2dd4bf" }}>↓</span> {fmtSpeed(status.net_in)}
             </span>
             <span className="text-dim flex items-center">
-              {showLatency && avgPing !== null && (
+              {showLatency && pingStats.length > 0 && (
                 <span className="relative group mr-2">
-                  <span className="font-medium" style={{ color: pingColor(avgPing) }}>
-                    {avgPing}ms
+                  <span
+                    className="font-medium"
+                    style={{ color: avgPing !== null ? pingColor(avgPing, avgLoss) : "#fb7185" }}
+                  >
+                    {avgPing !== null
+                      ? `${pingFace(avgPing, avgLoss)} ${avgPing}ms`
+                      : t("ping_timeout")}
                   </span>
                   {/* per-ISP breakdown on hover */}
                   <span className="hidden group-hover:flex flex-col gap-1 absolute bottom-full right-0 mb-2 z-20 glass-strong rounded-xl px-3 py-2 whitespace-nowrap text-left">
@@ -178,13 +183,16 @@ export default function NodeCard({ node, status, index, showLatency, onClick }: 
                       <span key={p.name} className="flex items-center gap-2 text-[11.5px]">
                         <span
                           className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ background: pingColor(p.avg) }}
+                          style={{ background: p.avg > 0 ? pingColor(p.avg, p.loss) : "#fb7185" }}
                         />
                         <span style={{ color: "var(--text)" }}>{p.name}</span>
-                        <span className="ml-auto font-medium" style={{ color: pingColor(p.avg) }}>
-                          {Math.round(p.avg)}ms
+                        <span
+                          className="ml-auto font-medium"
+                          style={{ color: p.avg > 0 ? pingColor(p.avg, p.loss) : "#fb7185" }}
+                        >
+                          {p.avg > 0 ? `${Math.round(p.avg)}ms` : t("ping_timeout")}
                         </span>
-                        <span className="text-dim">
+                        <span style={{ color: lossColor(p.loss) || "var(--text-dim)" }}>
                           {t("loss")} {Math.round(p.loss)}%
                         </span>
                       </span>

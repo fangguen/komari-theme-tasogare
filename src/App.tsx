@@ -13,15 +13,30 @@ type Mode = "day" | "night";
 const DEFAULT_WALL_DAY = "/wallpaper-day.svg";
 const DEFAULT_WALL_NIGHT = "/wallpaper-night.svg";
 
-function useMode(): [Mode, () => void] {
-  const [mode, setMode] = useState<Mode>(
-    () => (document.documentElement.dataset.mode as Mode) || "day",
-  );
+function autoMode(tz: string): Mode {
+  try {
+    const h = Number(new Date().toLocaleString("en", { timeZone: tz, hour: "numeric", hour12: false }));
+    return h >= 18 || h < 6 ? "night" : "day";
+  } catch {
+    return "day";
+  }
+}
+
+function useMode(tz: string): [Mode, () => void] {
+  const [mode, setMode] = useState<Mode>(() => {
+    const m = autoMode(tz);
+    document.documentElement.dataset.mode = m;
+    return m;
+  });
+  useEffect(() => {
+    const m = autoMode(tz);
+    document.documentElement.dataset.mode = m;
+    setMode(m);
+  }, [tz]);
   const toggle = useCallback(() => {
     setMode((m) => {
       const next = m === "day" ? "night" : "day";
       document.documentElement.dataset.mode = next;
-      localStorage.setItem("tasogare-mode", next);
       return next;
     });
   }, []);
@@ -29,8 +44,9 @@ function useMode(): [Mode, () => void] {
 }
 
 export default function App() {
-  const [mode, toggleMode] = useMode();
   const [pub, setPub] = useState<PublicInfo | null>(null);
+  const tz = ((pub?.theme_settings ?? {}) as Record<string, unknown>).timezone as string || "Asia/Shanghai";
+  const [mode, toggleMode] = useMode(tz);
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const [latest, setLatest] = useState<Record<string, LatestStatus>>({});
   const [query, setQuery] = useState("");

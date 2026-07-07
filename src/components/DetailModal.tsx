@@ -16,6 +16,7 @@ import { getPingRecords, getPingTasks, getRecords } from "../lib/api";
 import { daysUntil, fmtBytes, fmtDate, fmtPercent, fmtSpeed, fmtTime, fmtUptime } from "../lib/format";
 import { fmtCycle, fmtDaysLeft, t } from "../lib/i18n";
 import { osIcon } from "../lib/osIcon";
+import { lossColor, pingColor, pingFace } from "../lib/ping";
 import Flag from "./Flag";
 
 interface Props {
@@ -77,6 +78,87 @@ function MetaItem({ k, v }: { k: string; v: string }) {
   );
 }
 
+function PingTooltip({
+  active,
+  payload,
+  label,
+  loss,
+}: {
+  active?: boolean;
+  payload?: { name: string; value: number; color: string; dataKey?: string }[];
+  label?: string;
+  loss: Map<number, number>;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="glass-strong rounded-xl px-3 py-2 text-[12px]">
+      <div className="text-dim mb-1">{label}</div>
+      {payload.map((p) => {
+        const taskId = Number(String(p.dataKey).replace("t", ""));
+        const l = loss.get(taskId) ?? 0;
+        return (
+          <div key={p.name} className="flex items-center gap-1.5 num">
+            <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+            {p.name}: <b>{Math.round(p.value)} ms</b>
+            <span style={{ color: lossColor(l) || "var(--text-dim)" }}> · {t("loss")} {l}%</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PingLegend({
+  tasks,
+  avg,
+  loss,
+}: {
+  tasks: PingTask[];
+  avg: Map<number, number>;
+  loss: Map<number, number>;
+}) {
+  return (
+    <div className="flex flex-wrap justify-center gap-x-5 gap-y-1" style={{ paddingTop: 4 }}>
+      {tasks.map((task, i) => {
+        const a = avg.get(task.id) ?? 0;
+        const l = loss.get(task.id) ?? 0;
+        const face = a > 0 ? pingFace(a, l) : "(×ω×)";
+        const faceColor = a > 0 ? pingColor(a, l) : "#fb7185";
+        return (
+          <span key={task.id} className="relative group inline-flex flex-col items-center cursor-default">
+            <span className="flex items-center gap-1.5 text-[12.5px]">
+              <span
+                className="inline-block w-3.5 h-[2px] rounded-full"
+                style={{ background: PING_COLORS[i % PING_COLORS.length] }}
+              />
+              <span>{task.name}</span>
+              <span style={{ color: faceColor }}>{face}</span>
+            </span>
+            <span className="text-[10.5px] num" style={{ color: faceColor }}>
+              {a > 0 ? `${a}ms` : t("ping_timeout")}
+            </span>
+            <span className="hidden group-hover:flex flex-col gap-1 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 glass-strong rounded-xl px-3 py-2 whitespace-nowrap text-left text-[11.5px]">
+              <span className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: faceColor }} />
+                <span style={{ color: "var(--text)" }}>{task.name}</span>
+                <span className="ml-auto font-medium" style={{ color: faceColor }}>
+                  {a > 0 ? `${a}ms` : t("ping_timeout")}
+                </span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ opacity: 0 }} />
+                <span style={{ color: lossColor(l) || "var(--text-dim)" }}>
+                  {t("loss")} {l}%
+                </span>
+              </span>
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DetailModal({ node, status, mode, onClose }: Props) {
   const [hours, setHours] = useState(6);
   const [records, setRecords] = useState<LoadRecord[] | null>(null);
@@ -128,22 +210,35 @@ export default function DetailModal({ node, status, mode, onClose }: Props) {
   );
 
   const pingSeries = useMemo(() => {
-    if (!pingData || !pingData.records.length) return { data: [], tasks: [] as PingTask[] };
-    // records arrive newest-first; charts need chronological order
+    if (!pingData || !pingData.records.length)
+      return { data: [], tasks: [] as PingTask[], loss: new Map<number, number>(), avg: new Map<number, number>() };
     const sorted = [...pingData.records].sort(
       (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime(),
     );
     const byTime = new Map<string, Record<string, number | string>>();
-    const taskIds = new Set<number>();
+    const probes = new Map<number, { total: number; fail: number; sum: number; ok: number }>();
     for (const r of sorted) {
-      taskIds.add(r.task_id);
+      let st = probes.get(r.task_id);
+      if (!st) probes.set(r.task_id, (st = { total: 0, fail: 0, sum: 0, ok: 0 }));
+      st.total++;
       const key = fmtTime(r.time, hours);
       if (!byTime.has(key)) byTime.set(key, { time: key });
-      // value <= 0 means the probe failed; keep the gap instead of plotting 0
-      if (r.value > 0) byTime.get(key)![`t${r.task_id}`] = r.value;
+      if (r.value > 0) {
+        byTime.get(key)![`t${r.task_id}`] = r.value;
+        st.sum += r.value;
+        st.ok++;
+      } else {
+        st.fail++;
+      }
     }
-    const tasks = (pingData.tasks || []).filter((tk) => taskIds.has(tk.id));
-    return { data: Array.from(byTime.values()), tasks };
+    const tasks = (pingData.tasks || []).filter((tk) => probes.has(tk.id));
+    const loss = new Map<number, number>();
+    const avg = new Map<number, number>();
+    for (const [id, st] of probes) {
+      loss.set(id, Math.round((st.fail / st.total) * 100));
+      avg.set(id, st.ok > 0 ? Math.round(st.sum / st.ok) : 0);
+    }
+    return { data: Array.from(byTime.values()), tasks, loss, avg };
   }, [pingData, hours]);
 
   const pct = (v: number) => `${v.toFixed(1)}%`;
@@ -285,11 +380,15 @@ export default function DetailModal({ node, status, mode, onClose }: Props) {
                     <CartesianGrid stroke={grid} vertical={false} />
                     <XAxis dataKey="time" tick={{ fill: axis, fontSize: 10 }} tickLine={false} axisLine={false} minTickGap={38} />
                     <YAxis domain={[0, "auto"]} tick={{ fill: axis, fontSize: 10 }} tickLine={false} axisLine={false} width={38} tickFormatter={(v: number) => `${v}`} />
-                    <Tooltip content={<GlassTooltip fmt={(v) => `${Math.round(v)} ms`} />} />
+                    <Tooltip content={<PingTooltip loss={pingSeries.loss} />} />
                     <Legend
-                      iconType="plainline"
-                      iconSize={14}
-                      wrapperStyle={{ fontSize: 11, color: axis }}
+                      content={
+                        <PingLegend
+                          tasks={pingSeries.tasks}
+                          avg={pingSeries.avg}
+                          loss={pingSeries.loss}
+                        />
+                      }
                     />
                     {pingSeries.tasks.map((task, i) => (
                       <Line
