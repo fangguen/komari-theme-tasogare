@@ -1,7 +1,7 @@
 # Tasogare 黄昏 · Komari Theme
 
-二次元彩色玻璃拟态主题，白天与黑夜双壁纸，随一天流转。
-An anime-style colorful glassmorphism theme for [Komari](https://github.com/komari-monitor/komari), with day/night dual wallpapers.
+彩色玻璃拟态主题，白天与黑夜双壁纸，随一天流转。
+A vibrant glassmorphism theme for [Komari](https://github.com/komari-monitor/komari), with day/night dual wallpapers.
 
 | ☀️ Day | 🌙 Night |
 | --- | --- |

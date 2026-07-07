@@ -10,14 +10,17 @@ html[data-mode="day"] {
   color-scheme: light;
   --text: #262c4a;
   --text-dim: rgba(38, 44, 74, 0.6);
-  --glass: rgba(255, 255, 255, 0.6);
+  --glass: rgba(255, 255, 255, 0.72);
   --glass-strong: rgba(255, 255, 255, 0.94);
   --glass-border: rgba(255, 255, 255, 0.8);
   --glass-shadow: 0 8px 32px rgba(80, 70, 130, 0.14);
   --track: rgba(38, 44, 74, 0.1);
   --chip: rgba(255, 255, 255, 0.55);
   --accent: #7c6cf0;
-  --veil: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.12));
+  /* keep backdrop saturation neutral: boosting it amplifies the warm
+     wallpaper bleeding through and fights the in-card bar colors */
+  --glass-sat: 1;
+  --veil: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.24));
 }
 
 html[data-mode="night"] {
@@ -31,6 +34,7 @@ html[data-mode="night"] {
   --track: rgba(233, 236, 255, 0.12);
   --chip: rgba(255, 255, 255, 0.08);
   --accent: #9d8cff;
+  --glass-sat: 1.6;
   --veil: linear-gradient(180deg, rgba(5, 7, 22, 0.15), rgba(5, 7, 22, 0.35));
 }
 
@@ -47,16 +51,16 @@ body {
 
 .glass {
   background: var(--glass);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(20px) saturate(var(--glass-sat));
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
 
 .glass-strong {
   background: var(--glass-strong);
-  backdrop-filter: blur(28px) saturate(1.6);
-  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  backdrop-filter: blur(28px) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(28px) saturate(var(--glass-sat));
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
